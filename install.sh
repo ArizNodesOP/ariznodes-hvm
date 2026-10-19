@@ -3155,7 +3155,10 @@ cmd_uninstall() {
 
 # ============================================================================
 save_self_copy() { # lets you run:  sudo ariznodes status|doctor|upgrade|self-update
-  if [ -f "${BASH_SOURCE[0]:-}" ]; then install -m 755 "${BASH_SOURCE[0]}" /usr/local/sbin/ariznodes-installer 2>/dev/null && ln -sf /usr/local/sbin/ariznodes-installer /usr/local/bin/ariznodes || true; fi
+  if [ -f "${BASH_SOURCE[0]:-}" ]; then install -m 755 "${BASH_SOURCE[0]}" /usr/local/sbin/ariznodes-installer 2>/dev/null && ln -sf /usr/local/sbin/ariznodes-installer /usr/local/bin/ariznodes || true
+  elif [[ "$UPDATE_URL" != *YOUR-GITHUB-USER* ]]; then  # started with: curl ... | sudo bash  (no file on disk), so fetch our own copy
+    curl -fsSL --retry 2 -m 60 -o /usr/local/sbin/ariznodes-installer "$UPDATE_URL" 2>/dev/null && bash -n /usr/local/sbin/ariznodes-installer && chmod 755 /usr/local/sbin/ariznodes-installer && ln -sf /usr/local/sbin/ariznodes-installer /usr/local/bin/ariznodes || true
+  fi
   return 0
 }
 
@@ -3226,6 +3229,6 @@ main() {
 }
 
 # Allow `source install.sh` for testing without running anything.
-if [ "${BASH_SOURCE[0]}" = "$0" ] || [ -z "${BASH_SOURCE[0]:-}" ] || [ "$0" = "bash" ] || [ "$0" = "-bash" ]; then
+if [ "${BASH_SOURCE[0]:-}" = "$0" ] || [ -z "${BASH_SOURCE[0]:-}" ] || [ "$0" = "bash" ] || [ "$0" = "-bash" ]; then
   main "$@"
 fi
