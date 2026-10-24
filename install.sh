@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  Ariznodes(TM) HVM Panel v3.5 - installer & manager  (c) 2026 Ariznodes, all rights reserved                      v3.5.0
+#  Ariznodes(TM) HVM Panel v3.6 - installer & manager  (c) 2026 Ariznodes, all rights reserved                      v3.6.0
 # -----------------------------------------------------------------------------
 #  Supported : Ubuntu 22.04 / 24.04, Debian 12   (x86_64 or aarch64, root)
 #  Install   : sudo bash install.sh
@@ -20,7 +20,7 @@ set -Eeuo pipefail
 
 ORIG_ARGS=("$@")
 SCRIPT_NAME="${BASH_SOURCE[0]:-install.sh}"
-VERSION="3.5.0"
+VERSION="3.6.0"
 APP=/opt/ariznodes
 CONF_DIR=/etc/ariznodes
 CONF="$CONF_DIR/install.conf"
@@ -57,12 +57,14 @@ else
   C_RED=""; C_GRN=""; C_YLW=""; C_BLU=""; C_CYN=""; C_DIM=""; C_BLD=""; C_RST=""
 fi
 
+if [[ "${LC_ALL:-${LANG:-}}" == *UTF-8* ]]; then S_INFO="●" S_OK="✔" S_WARN="▲" S_ERR="✖"; else S_INFO="[*]" S_OK="[+]" S_WARN="[!]" S_ERR="[x]"; fi
 _ts()  { date '+%F %T'; }
+rainbow() { local i; if [ -t 1 ]; then for i in $(seq 0 57); do printf '\033[38;5;%sm━' "$((27 + i % 36))"; done; printf '\033[0m\n'; else printf '%s\n' "=========================================================="; fi; }
 _log() { printf '[%s] %s\n' "$(_ts)" "$*" >>"$LOG" 2>/dev/null || true; }
-info() { printf '%s[*]%s %s\n' "$C_BLU" "$C_RST" "$*"; _log "INFO  $*"; }
-ok()   { printf '%s[+]%s %s\n' "$C_GRN" "$C_RST" "$*"; _log "OK    $*"; }
-warn() { printf '%s[!]%s %s\n' "$C_YLW" "$C_RST" "$*" >&2; _log "WARN  $*"; }
-err()  { printf '%s[x]%s %s\n' "$C_RED" "$C_RST" "$*" >&2; _log "ERROR $*"; }
+info() { printf '%s%s%s %s\n' "$C_BLU" "$S_INFO" "$C_RST" "$*"; _log "INFO  $*"; }
+ok()   { printf '%s%s%s %s\n' "$C_GRN" "$S_OK" "$C_RST" "$*"; _log "OK    $*"; }
+warn() { printf '%s%s%s %s\n' "$C_YLW" "$S_WARN" "$C_RST" "$*" >&2; _log "WARN  $*"; }
+err()  { printf '%s%s%s %s\n' "$C_RED" "$S_ERR" "$C_RST" "$*" >&2; _log "ERROR $*"; }
 die()  { err "$*"; exit 1; }
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
@@ -95,6 +97,7 @@ Commands
   self-update        Download the newest installer from your GitHub URL, then upgrade.
   diag               Write a support bundle (no secrets) to /root.
   node-test          API node: find out why it does not connect.
+  show-key           Print the master key that encrypts backups and secrets.
 
 Flags
   -y, --yes          No questions; use saved config / env vars / defaults.
@@ -102,6 +105,7 @@ Flags
   --harden           Also configure UFW firewall + fail2ban.   (--no-harden to skip)
   --no-tunnel        Do not install Cloudflare Tunnel.
   --node             API node installation (connect to an existing panel).
+  --panel-url/--panel-key/--node-name/--node-url   Pre-answer the node questions (the panel shows a ready-made command).
   --port N           Local panel port (default 8080).
   --domain D         Panel domain.
   --config FILE      Source variables from FILE (DOMAIN=..., DISCORD_BOT_TOKEN=...).
@@ -221,14 +225,14 @@ mem_guard() { local a; a="$(awk '/MemAvailable/ {print int($2/1024)}' /proc/memi
 phase() { # phase "Title" - overall progress bar
   STEP_NO=$((STEP_NO + 1)); local w=24 f i bar="" on="#" off="-"
   [[ "${LC_ALL:-${LANG:-}}" == *UTF-8* ]] && { on="█"; off="░"; }
-  f=$(( STEP_NO * w / STEP_TOTAL )); for ((i = 0; i < w; i++)); do if [ "$i" -lt "$f" ]; then bar+="$on"; else bar+="$off"; fi; done
+  f=$(( STEP_NO * w / STEP_TOTAL )); for ((i = 0; i < w; i++)); do if [ "$i" -lt "$f" ]; then bar+="$(printf '\033[38;5;%sm' "$((39 + i))")$on"; else bar+="${C_DIM}${off}"; fi; done; bar+="$C_RST"
   printf '\n%s%s%s %s%2d/%d%s  %s%s%s\n' "$C_CYN" "$bar" "$C_RST" "$C_DIM" "$STEP_NO" "$STEP_TOTAL" "$C_RST" "$C_BLD" "$1" "$C_RST"; _log "PHASE $STEP_NO/$STEP_TOTAL $1"
 }
 splash() { # animated title card (skipped when not a terminal or NO_ANIM=1)
   if [ ! -t 1 ] || [ -n "${NO_ANIM:-}" ]; then banner; return 0; fi
   local t="  A R I Z N O D E S (TM)   H V M   P A N E L   v${VERSION}" i p
   echo; for ((i = 0; i < ${#t}; i++)); do printf '\033[1;38;5;%sm%s' "$((39 + (i * 2) % 12))" "${t:i:1}"; sleep 0.012; done; printf '%s\n' "$C_RST"
-  printf '%s  LXC  |  KVM  |  Docker  |  Discord-verified  |  multi-node%s\n  ' "$C_DIM" "$C_RST"
+  printf '  \033[48;5;27;97m LXC \033[48;5;33;97m KVM \033[48;5;39;30m DOCKER \033[48;5;42;30m DISCORD \033[48;5;178;30m NODES \033[48;5;171;97m RANKS \033[48;5;203;97m TEST LAB \033[0m\n  '
   for p in $(seq 1 44); do printf '\033[38;5;%sm=' "$((39 + p % 12))"; sleep 0.01; done; printf '%s\n' "$C_RST"
 }
 celebrate() { [ -t 1 ] && [ -z "${NO_ANIM:-}" ] || return 0; local i; for i in $(seq 0 38); do printf '\r\033[K%*s%s' "$i" "" "${C_GRN}=====>${C_RST} ${C_BLD}liftoff${C_RST}"; sleep 0.02; done; printf '\r\033[K'; }
@@ -280,6 +284,10 @@ parse_args() {
       --no-harden)         HARDEN=0 ;;
       --no-tunnel)         NO_TUNNEL=1 ;;
       --node|--api-node)   INSTALL_MODE=node ;;
+      --panel-url)         PANEL_URL="${2:?--panel-url needs a value}"; shift ;;
+      --panel-key)         PANEL_KEY="${2:?--panel-key needs a value}"; shift ;;
+      --node-name)         NODE_NAME="${2:?--node-name needs a value}"; shift ;;
+      --node-url)          NODE_URL="${2:?--node-url needs a value}"; shift ;;
       --port)              PORT="${2:?--port needs a value}"; PORT_FLAG=1; shift ;;
       --domain)            DOMAIN="${2:?--domain needs a value}"; shift ;;
       --config)            CONFIG_FILE="${2:?--config needs a file}"; shift ;;
@@ -510,17 +518,30 @@ CREATE TABLE IF NOT EXISTS nodes(id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NU
 CREATE TABLE IF NOT EXISTS ip_bans(ip TEXT PRIMARY KEY, reason TEXT, created_at REAL DEFAULT (strftime('%s','now')));
 CREATE TABLE IF NOT EXISTS recovery(id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, hash TEXT NOT NULL, used INTEGER DEFAULT 0);
 CREATE INDEX IF NOT EXISTS idx_rec ON recovery(user_id, hash);
+CREATE TABLE IF NOT EXISTS identities(id INTEGER PRIMARY KEY, provider TEXT NOT NULL, subject TEXT NOT NULL, user_id INTEGER NOT NULL, UNIQUE(provider, subject));
+CREATE TABLE IF NOT EXISTS chat(id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, text TEXT NOT NULL, created_at REAL DEFAULT (strftime('%s','now')));
+CREATE TABLE IF NOT EXISTS tickets(id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, subject TEXT, category TEXT, status TEXT DEFAULT 'open', updated REAL DEFAULT (strftime('%s','now')), created_at REAL DEFAULT (strftime('%s','now')));
+CREATE TABLE IF NOT EXISTS ticket_msgs(id INTEGER PRIMARY KEY, ticket_id INTEGER NOT NULL, user_id INTEGER NOT NULL, text TEXT, staff INTEGER DEFAULT 0, created_at REAL DEFAULT (strftime('%s','now')));
+CREATE TABLE IF NOT EXISTS tests(id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, provider TEXT, remote_id TEXT, name TEXT, info TEXT, status TEXT DEFAULT 'active', expires_at REAL, created_at REAL DEFAULT (strftime('%s','now')));
+CREATE INDEX IF NOT EXISTS idx_chat ON chat(id);
+CREATE INDEX IF NOT EXISTS idx_tmsg ON ticket_msgs(ticket_id);
 """
 DEFAULTS = {"max_vps": "1", "registration": "1", "mining_autostop": "0", "announcement": "",
             "maintenance": "0", "vps_days": "0", "alert_webhook": "", "pinggy_token": "", "auto_tunnel": "1",
             "local_slots": "0", "docker_fallback": "0", "min_pw": "10", "max_fails": "5", "lock_min": "15", "sess_hours": "12",
-            "admin_ips": "", "force_admin_2fa": "0", "force_all_2fa": "0", "ip_ban_after": "20"}
+            "admin_ips": "", "force_admin_2fa": "0", "force_all_2fa": "0", "ip_ban_after": "20",
+            "test_provider": "local", "test_minutes": "30", "test_cooldown_h": "6", "test_max": "10", "daytona_key": "", "daytona_url": "", "daytona_proxy": "", "daytona_snapshot": "",
+            "cli_create": "", "cli_delete": "", "oauth_google_id": "", "oauth_google_secret": "", "oauth_github_id": "", "oauth_github_secret": ""}
 MIGRATIONS = [  # additive column upgrades; "duplicate column" errors just mean already applied
     "ALTER TABLE users ADD COLUMN totp_secret TEXT", "ALTER TABLE users ADD COLUMN totp_on INTEGER DEFAULT 0",
     "ALTER TABLE users ADD COLUMN sv INTEGER DEFAULT 0", "ALTER TABLE users ADD COLUMN bonus_invites INTEGER DEFAULT 0",
     "ALTER TABLE vps ADD COLUMN label TEXT", "ALTER TABLE vps ADD COLUMN ssh_state TEXT",
     "ALTER TABLE vps ADD COLUMN pinggy_on INTEGER DEFAULT 0", "ALTER TABLE vps ADD COLUMN pinggy_url TEXT",
     "ALTER TABLE vps ADD COLUMN sshx_url TEXT", "ALTER TABLE vps ADD COLUMN expires_at REAL DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN rank INTEGER DEFAULT 0", "ALTER TABLE users ADD COLUMN email_enc TEXT", "ALTER TABLE users ADD COLUMN email_hash TEXT",
+    "ALTER TABLE users ADD COLUMN muted_until REAL DEFAULT 0", "ALTER TABLE users ADD COLUMN oauth_only INTEGER DEFAULT 0",
+    "ALTER TABLE nodes ADD COLUMN kind TEXT", "ALTER TABLE nodes ADD COLUMN domain TEXT",
+    "ALTER TABLE tokens ADD COLUMN scope TEXT DEFAULT 'full'", "ALTER TABLE tokens ADD COLUMN expires_at REAL DEFAULT 0",
     "ALTER TABLE users ADD COLUMN coins INTEGER DEFAULT 0", "ALTER TABLE users ADD COLUMN streak INTEGER DEFAULT 0", "ALTER TABLE users ADD COLUMN last_claim INTEGER DEFAULT 0",
     "ALTER TABLE vps ADD COLUMN node_id INTEGER DEFAULT 0", "ALTER TABLE vps ADD COLUMN suspended INTEGER DEFAULT 0", "ALTER TABLE vps ADD COLUMN susp_reason TEXT",
 ]
@@ -555,6 +576,13 @@ def init_db():
     for stmt in MIGRATIONS:
         try: c.execute(stmt)
         except sqlite3.OperationalError: pass
+    dom = os.getenv("DOMAIN", "local")
+    for nm, kd in (("local-docker", "docker"), ("local-lxc", "lxc"), ("local-kvm", "kvm")):  # built-in nodes, 10 slots each
+        c.execute("INSERT OR IGNORE INTO nodes(name,url,key,caps,slots,kind,domain) VALUES(?,?,?,?,?,?,?)", (nm, "", "", "{}", 10, kd, f"{kd}.node.{dom}"))
+    c.execute("UPDATE users SET rank=CASE WHEN id=(SELECT MIN(id) FROM users WHERE is_admin=1) THEN 11 ELSE 10 END WHERE is_admin=1 AND (rank IS NULL OR rank=0)")
+    if _F:  # sensitive columns are stored encrypted; upgrade any plaintext left from older versions
+        for r in c.execute("SELECT id, totp_secret FROM users WHERE totp_secret IS NOT NULL AND totp_secret!='' AND totp_secret NOT LIKE 'enc:%'").fetchall():
+            c.execute("UPDATE users SET totp_secret=? WHERE id=?", (esec(r["totp_secret"]), r["id"]))
     c.commit(); c.close()
 
 def setting(k): 
@@ -602,7 +630,7 @@ def run(cmd, timeout=600, inp=None):
     if nid:
         node = q("SELECT * FROM nodes WHERE id=?", (nid,), one=True)
         if not node: raise RuntimeError("node no longer exists")
-        return _remote_run(node, list(cmd), timeout, inp)
+        if node["url"]: return _remote_run(node, list(cmd), timeout, inp)  # built-in local nodes have no URL and run right here
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, input=inp,
                        env={**os.environ, "PATH": "/snap/bin:/usr/local/bin:/usr/bin:/bin"})
     if r.returncode:
@@ -671,19 +699,43 @@ def autoban(ip):
     if n >= int(setting("ip_ban_after") or 20):
         ex("INSERT OR IGNORE INTO ip_bans(ip,reason) VALUES(?,?)", (ip, "auto: repeated failed logins")); alert("security", f"{ip} auto-banned after repeated failed logins")
 
+RANKS = [("Member", "#9aa4b2"), ("Special", "#8be9fd"), ("VIP", "#50fa7b"), ("VIP+", "#2ee6a6"), ("MVP+", "#ffb86c"), ("MVP++", "#ff9f43"),
+         ("T.Mod", "#bd93f9"), ("Mod", "#a78bfa"), ("Admin", "#ff5555"), ("Sr. Admin", "#ff3b6b"), ("Head Manager", "#ff2d95"), ("Main Owner", "#ffd700")]
+_STAFF = {"admin.view", "users.ban", "users.timeout", "vps.create_any", "chat.moderate", "tickets.reply"}
+PERMS = {6: _STAFF, 7: _STAFF, 8: _STAFF}
+PERMS[9] = _STAFF | {"vps.manage", "bonus.grant", "users.rank", "nodes.view", "export"}
+PERMS[10] = PERMS[9] | {"nodes.manage", "security.manage", "integrations.manage", "settings.manage"}
+PERMS[11] = "*"
+RANK_PERKS = {1: (1, 0), 2: (1, 2), 3: (1, 4), 4: (2, 8), 5: (2, 12)}  # rank -> (extra server slots, plan unlocked as if you had N invites)
+def rank_of(u):
+    r = u["rank"] or 0
+    return 10 if r == 0 and u["is_admin"] else r  # legacy admins count as Head Manager
+def rank_name(u): return RANKS[min(rank_of(u), 11)][0]
+def rank_color(u): return RANKS[min(rank_of(u), 11)][1]
+def has_perm(u, perm):
+    p = PERMS.get(rank_of(u), set()); return p == "*" or perm in p
+def rank_floor(u): return RANK_PERKS.get(rank_of(u), (0, 0))[1]
+def rank_slots(u): return RANK_PERKS.get(rank_of(u), (0, 0))[0]
+def esec(s): return "enc:" + enc(s) if s else ""
+def dsec(v):
+    if not v: return ""
+    return dec(v[4:]) if v.startswith("enc:") else v
+def email_hash(e): return hmac.new(os.environ.get("SECRET_KEY", "x").encode(), (e or "").strip().lower().encode(), hashlib.sha256).hexdigest()
+def node_used(nid): return q("SELECT COUNT(*) c FROM vps WHERE node_id=? AND status!='failed'", (nid,), one=True)["c"]
+
+KIND_ENGINE = {"docker": "docker", "ct": "lxc", "vm": "kvm"}
 def pick_node(kind):
-    """0 = this host. Fill the local host first, then the remote node with the most free slots."""
-    set_node(0); eng = "docker" if kind == "docker" else "lxc"
-    local = int(setting("local_slots") or 0)
-    used = q("SELECT COUNT(*) n FROM vps WHERE node_id=0 AND status!='failed'", one=True)["n"]
-    has = have_docker() if eng == "docker" else (have_lxc() or (kind == "ct" and setting("docker_fallback") == "1" and have_docker()))
-    if has and (kind != "vm" or have_kvm()) and (local == 0 or used < local): return 0
-    best = None
-    for n in q("SELECT * FROM nodes WHERE enabled=1"):
-        caps = json.loads(n["caps"] or "{}")
-        if not caps.get(eng) or (kind == "vm" and not caps.get("kvm")): continue
-        free = n["slots"] - q("SELECT COUNT(*) c FROM vps WHERE node_id=? AND status!='failed'", (n["id"],), one=True)["c"]
-        if free > 0 and (best is None or free > best[0]): best = (free, n["id"])
+    """Built-in local nodes (10 slots each) come first, then remote nodes; the node with the most free slots wins."""
+    wants = [KIND_ENGINE[kind]] + (["docker"] if kind == "ct" and setting("docker_fallback") == "1" else []); best = None
+    for n in q("SELECT * FROM nodes WHERE enabled=1 ORDER BY id"):
+        free = n["slots"] - node_used(n["id"])
+        if free <= 0: continue
+        if not n["url"]:
+            if n["kind"] not in wants: continue
+            set_node(0); ok = {"docker": have_docker, "lxc": have_lxc, "kvm": lambda: have_lxc() and have_kvm()}[n["kind"]]()
+        else:
+            caps = json.loads(n["caps"] or "{}"); ok = any(caps.get(w) and (w != "kvm" or caps.get("kvm")) for w in wants)
+        if ok and (best is None or free > best[0]): best = (free, n["id"])
     if best: return best[1]
     raise RuntimeError("No node has a free slot for this server type")
 
@@ -712,7 +764,7 @@ if __name__ == "__main__":
     init_db()
     if len(sys.argv) > 2 and sys.argv[1] == "bootstrap":  # bootstrap <admin-username>; password via ADMIN_PASS env
         if not q("SELECT 1 FROM users WHERE username=?", (sys.argv[2],), one=True):
-            ex("INSERT INTO users(username,pw_hash,is_admin) VALUES(?,?,1)",
+            ex("INSERT INTO users(username,pw_hash,is_admin,rank) VALUES(?,?,1,11)",
                (sys.argv[2], generate_password_hash(os.environ["ADMIN_PASS"])))
             print("admin created")
 PYCORE
@@ -844,6 +896,9 @@ def register():
         elif core.q("SELECT 1 FROM users WHERE username=? COLLATE NOCASE", (u,), one=True): flash("Username taken.", "err")
         else:
             core.ex("INSERT INTO users(username,pw_hash) VALUES(?,?)", (u, generate_password_hash(p)))
+            em = request.form.get("email", "").strip().lower()
+            if re.fullmatch(r"[^@\s]{1,64}@[^@\s]{1,120}", em) and not core.q("SELECT 1 FROM users WHERE email_hash=?", (core.email_hash(em),), one=True):
+                core.ex("UPDATE users SET email_enc=?, email_hash=? WHERE username=?", (core.esec(em), core.email_hash(em), u))
             flash("Account created - log in.", "ok"); return redirect("/login")
     return render_template("auth.html", mode="register")
 
@@ -852,7 +907,7 @@ def register():
 def login():
     if request.method == "POST":
         pw = request.form.get("password", "")
-        u = core.q("SELECT * FROM users WHERE username=? COLLATE NOCASE", (request.form.get("username", ""),), one=True)
+        ident = request.form.get("username", "").strip(); u = core.q("SELECT * FROM users WHERE username=? COLLATE NOCASE OR email_hash=?", (ident, core.email_hash(ident)), one=True)
         if not human_ok(): flash("Human verification failed.", "err")
         elif u and u["locked_until"] > time.time(): flash("Too many attempts. Try again in 15 minutes.", "err")
         elif u and check_password_hash(u["pw_hash"], pw):
@@ -926,8 +981,8 @@ def vps_create():
     owned = core.q("SELECT COUNT(*) n FROM vps WHERE user_id=? AND status!='failed'", (u["id"],), one=True)["n"]
     if kind not in ("ct", "vm", "docker") or image not in ("22.04", "24.04") or plan not in core.PLANS: abort(400)
     if not u["discord_id"]: flash("Link your Discord account first.", "err")
-    elif core.PLANS[plan]["invites"] > n and not u["is_admin"]: flash("Not enough verified invites for that plan.", "err")
-    elif owned >= max(int(core.setting("max_vps")), core.PLANS[core.plan_for(n) or "basic"]["slots"]) and not u["is_admin"]: flash("VPS limit reached.", "err")
+    elif core.PLANS[plan]["invites"] > max(n, core.rank_floor(u)) and not u["is_admin"]: flash("Not enough verified invites for that plan.", "err")
+    elif owned >= max(int(core.setting("max_vps")), core.PLANS[core.plan_for(max(n, core.rank_floor(u))) or "basic"]["slots"] + core.rank_slots(u)) and not u["is_admin"]: flash("VPS limit reached.", "err")
     else:
         name = f"anz-{re.sub('[^a-z0-9]', '', u['username'].lower())[:10]}-{secrets.token_hex(2)}"
         vid = core.ex("INSERT INTO vps(user_id,name,plan,kind,image,secret) VALUES(?,?,?,?,?,?)",
@@ -1150,7 +1205,7 @@ cat > "$APP/bot.py" <<'PYBOT'
 import asyncio, collections, json, logging, os, time
 import discord
 from discord import app_commands
-import core, ops
+import core, ops, providers
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 log = logging.getLogger("ariznodes-bot")
@@ -1223,7 +1278,7 @@ class Bot(discord.Client):
             guild = self.get_guild(GUILD)
             try: await guild.fetch_member(int(u["discord_id"]))
             except discord.NotFound: raise RuntimeError("User is not in the Discord server")
-            n = core.valid_invites(u["discord_id"]); need = core.PLANS[v["plan"]]["invites"]
+            n = max(core.valid_invites(u["discord_id"]), core.rank_floor(u)); need = core.PLANS[v["plan"]]["invites"]
             if n < need and not u["is_admin"]: raise RuntimeError(f"Needs {need} valid invites, has {n}")
             await self.notify(f"<@{u['discord_id']}> wants a {v['plan']} {v['kind']} - verified ({n} legitimate invites). Provisioning...")
             nid = await asyncio.to_thread(core.pick_node, v["kind"])  # this host first, then the remote node with free slots
@@ -1260,6 +1315,8 @@ class Bot(discord.Client):
 
     def scan(self):  # sustained >90% CPU for 5 consecutive minutes is treated as likely mining
         for gone in ops.expire_sweep(): log.info("expired server removed: %s", gone)
+        try: providers.sweep()  # delete expired test-lab servers
+        except Exception: log.exception("test sweep")
         for v in core.q("SELECT * FROM vps WHERE engine IS NOT NULL"):
             core.set_node(v["node_id"])
             st = core.state(v["engine"], v["name"])
@@ -1767,7 +1824,463 @@ T["api.html"] = r'''{% extends "base.html" %}{% block body %}<div class="ph"><h1
 <pre>curl -H "Authorization: Bearer YOUR_TOKEN" https://{{ request.host }}/api/v1/vps</pre></div>
 <script nonce="{{ nonce }}">document.getElementById('go').onclick=async()=>{const [m,p]=document.getElementById('ep').value.split(' ');const r=document.getElementById('res');r.textContent='Sending...';
 try{const x=await fetch(p.replace('{id}',encodeURIComponent(document.getElementById('vid').value||'0')),{method:m,headers:{Authorization:'Bearer '+document.getElementById('tk').value}});let t=await x.text();try{t=JSON.stringify(JSON.parse(t),null,2)}catch(e){}r.textContent='HTTP '+x.status+'\n'+t}catch(e){r.textContent='Request failed: '+e}}</script>{% endblock %}'''
+
+import hub  # noqa: E402,F401  (ranks, social login, chat, tickets, test lab, nodes)
 PYFUN
+
+cat > "$APP/providers.py" <<'PYPROV'
+"""Temporary test servers. Providers: Daytona (REST API), a custom CLI/API wrapper, or a short-lived local Docker container."""
+import re, secrets, shlex, subprocess, time
+import requests
+import core, ops
+
+def _dt(method, path, base=None, **kw):
+    key = core.dsec(core.setting("daytona_key"))
+    if not key: raise RuntimeError("Daytona is not configured (Admin > Integrations)")
+    base = (base or core.setting("daytona_url") or "https://app.daytona.io/api").rstrip("/")
+    r = requests.request(method, base + path, headers={"Authorization": "Bearer " + key}, timeout=40, **kw)
+    if r.status_code >= 400: raise RuntimeError(f"Daytona API {r.status_code}: {r.text[:140]}")
+    try: return r.json()
+    except ValueError: return {}
+
+def _cli(template, ident):
+    """Run an admin-configured command template. No shell: arguments are split and {name}/{id} are substituted after splitting."""
+    argv = [a.replace("{name}", ident).replace("{id}", ident) for a in shlex.split(template)]
+    if not argv: raise RuntimeError("Empty CLI command")
+    r = subprocess.run(argv, capture_output=True, text=True, timeout=120)
+    if r.returncode: raise RuntimeError((r.stderr or r.stdout or "CLI failed").strip()[-200:])
+    return r.stdout
+
+def create(provider, name, minutes):
+    if provider == "daytona":
+        body = {"snapshot": core.setting("daytona_snapshot")} if core.setting("daytona_snapshot") else {}
+        sb = _dt("POST", "/sandbox", json=body); sid = sb.get("id") or sb.get("name")
+        if not sid: raise RuntimeError("Daytona did not return a sandbox id")
+        try: info = _dt("POST", f"/sandbox/{sid}/ssh-access", params={"expiresInMinutes": minutes}).get("sshCommand", "")
+        except RuntimeError: info = ""
+        return dict(remote_id=sid, info=info or "Use the console below.")
+    if provider == "cli":
+        if not core.setting("cli_create"): raise RuntimeError("The custom CLI provider is not configured")
+        out = _cli(core.setting("cli_create"), name); m = re.search(r"(ssh [^\n]+|https?://\S+)", out)
+        return dict(remote_id=name, info=m.group(1) if m else (out.strip()[:200] or "Created."))
+    core.set_node(0); core.provision(name, "basic", "docker", "24.04", secrets.token_urlsafe(12))  # local: short-lived Docker container
+    return dict(remote_id=name, info="Local test container. Use the console below.")
+
+def delete(provider, remote_id):
+    if provider == "daytona": _dt("DELETE", f"/sandbox/{remote_id}")
+    elif provider == "cli":
+        if core.setting("cli_delete"): _cli(core.setting("cli_delete"), remote_id)
+    else: core.set_node(0); core.control("docker", remote_id, "delete")
+
+def run_cmd(provider, remote_id, cmd):
+    if provider == "daytona":
+        base = (core.setting("daytona_proxy") or "https://proxy.app.daytona.io").rstrip("/")
+        j = _dt("POST", f"/toolbox/{remote_id}/process/execute", base=base, json={"command": cmd})
+        return str(j.get("result", j))[-6000:]
+    if provider == "local": core.set_node(0); return ops.sh({"engine": "docker", "name": remote_id}, cmd, 60)[-6000:]
+    raise RuntimeError("Console is not available for this provider")
+
+def sweep():
+    """Delete expired test servers (called by the bot every minute and when the page loads)."""
+    n = 0
+    for t in core.q("SELECT * FROM tests WHERE status='active' AND expires_at<?", (time.time(),)):
+        try: delete(t["provider"], t["remote_id"])
+        except Exception: pass
+        core.ex("UPDATE tests SET status='expired' WHERE id=?", (t["id"],)); n += 1
+    return n
+PYPROV
+
+cat > "$APP/hub.py" <<'PYHUB'
+"""v3.6: ranks + permissions, social login, public chat, tickets, test lab, easy nodes, cooler theme."""
+import hashlib, json, os, re, secrets, time
+from urllib.parse import urlencode
+import requests
+from flask import abort, flash, jsonify, redirect, render_template, request, session
+from werkzeug.security import generate_password_hash
+import core, providers
+import app as A
+from app import T, app, limiter, login_required, me, uahash
+from features import act
+
+def need(perm):
+    u = me()
+    if not u or not core.has_perm(u, perm): abort(403)
+    return u
+
+# ------------------------------------------------------------------ rank gate for every /admin page
+ROUTE_PERMS = [("/admin/nodes", "nodes.view", "nodes.manage"), ("/admin/security", "security.manage", "security.manage"), ("/admin/more/settings", "settings.manage", "settings.manage"),
+    ("/admin/settings", "settings.manage", "settings.manage"), ("/admin/alerts", "admin.view", "settings.manage"), ("/admin/bonus", "bonus.grant", "bonus.grant"),
+    ("/admin/vps", "vps.manage", "vps.manage"), ("/admin/export", "export", "export"), ("/admin/ranks", "users.rank", "users.rank"), ("/admin/integrations", "integrations.manage", "integrations.manage"),
+    ("/admin/tickets", "tickets.reply", "tickets.reply"), ("/admin/chat", "chat.moderate", "chat.moderate"), ("/admin/timeout", "users.timeout", "users.timeout"),
+    ("/admin/user", "admin.view", "users.ban"), ("/admin", "admin.view", "admin.view")]
+
+@app.before_request
+def rank_gate():
+    p, u = request.path, me()
+    if not p.startswith("/admin") or not u: return
+    if not core.has_perm(u, "admin.view"): abort(404)  # the staff area does not exist for regular users
+    if re.fullmatch(r"/admin/user/\d+/(promote|demote)", p): flash("Roles are managed under Staff > Ranks.", "err"); return redirect("/admin/ranks")
+    for pre, g, po in ROUTE_PERMS:
+        if p == pre or p.startswith(pre + "/"):
+            if not core.has_perm(u, g if request.method == "GET" else po): abort(403)
+            break
+    m = re.fullmatch(r"/admin/(?:user|timeout)/(\d+)(?:/(?:ban|unban))?", p)
+    if m and request.method == "POST":  # staff can only act on people ranked below them
+        t = core.q("SELECT * FROM users WHERE id=?", (int(m.group(1)),), one=True)
+        if t and (t["id"] == u["id"] or core.rank_of(t) >= core.rank_of(u)): abort(403)
+
+@app.context_processor
+def hub_ctx():
+    u = me()
+    return dict(can=lambda p: bool(u) and core.has_perm(u, p), rank_name=core.rank_name(u) if u else "", rank_color=core.rank_color(u) if u else "", oauth_providers=enabled_providers)
+
+# ----------------------------------------------------------------------- ranks page
+@app.route("/admin/ranks")
+@login_required
+def ranks_page():
+    mine = core.rank_of(need("users.rank"))
+    return render_template("ranks.html", users=core.q("SELECT * FROM users ORDER BY id LIMIT 300"), allowed=[i for i in range(min(mine, 11))], mine=mine, ranks=core.RANKS)
+
+@app.post("/admin/ranks/set")
+@login_required
+def ranks_set():
+    u = need("users.rank"); mine = core.rank_of(u)
+    t = core.q("SELECT * FROM users WHERE id=?", (int(request.form.get("uid", "0") or 0),), one=True) or abort(404)
+    new = int(request.form.get("rank", "0")) if request.form.get("rank", "").isdigit() else -1
+    if t["id"] == u["id"] or (core.rank_of(t) >= mine and mine < 11) or not (0 <= new < mine) or new > 10: abort(403)
+    core.ex("UPDATE users SET rank=?, is_admin=? WHERE id=?", (new, 1 if new >= 6 else 0, t["id"]))
+    act("rank", f"{t['username']} -> {core.RANKS[new][0]}"); flash(f"{t['username']} is now {core.RANKS[new][0]}.", "ok"); return redirect("/admin/ranks")
+
+@app.post("/admin/timeout/<int:uid>")
+@login_required
+def timeout_user(uid):
+    need("users.timeout"); m = request.form.get("minutes", "0"); m = min(int(m), 43200) if m.isdigit() else 0
+    core.ex("UPDATE users SET muted_until=? WHERE id=?", (time.time() + m * 60 if m else 0, uid)); act("timeout", f"user#{uid} {m} min")
+    flash("Timeout set." if m else "Timeout cleared.", "ok"); return redirect(request.referrer or "/admin/ranks")
+
+# --------------------------------------------------------------- social login (Google, GitHub, Discord)
+OAUTH = {"google": dict(auth="https://accounts.google.com/o/oauth2/v2/auth", token="https://oauth2.googleapis.com/token", info="https://openidconnect.googleapis.com/v1/userinfo", scope="openid email profile", label="Google"),
+         "github": dict(auth="https://github.com/login/oauth/authorize", token="https://github.com/login/oauth/access_token", info="https://api.github.com/user", scope="read:user user:email", label="GitHub"),
+         "discord": dict(auth="https://discord.com/oauth2/authorize", token="https://discord.com/api/oauth2/token", info="https://discord.com/api/users/@me", scope="identify email", label="Discord")}
+
+def oauth_cfg(p):
+    if p == "discord": return os.getenv("DISCORD_CLIENT_ID"), os.getenv("DISCORD_CLIENT_SECRET")
+    return core.setting(f"oauth_{p}_id"), core.dsec(core.setting(f"oauth_{p}_secret"))
+def enabled_providers(): return [(k, v["label"]) for k, v in OAUTH.items() if all(oauth_cfg(k))]
+
+def finish_login(u):
+    if u["banned"]: flash("This account is banned.", "err"); return redirect("/login")
+    core.ex("UPDATE users SET fails=0 WHERE id=?", (u["id"],))
+    if u["totp_on"]: session.clear(); session["pre2fa"] = u["id"]; session["csrf"] = secrets.token_urlsafe(32); return redirect("/login/2fa")
+    session.clear(); session.update(uid=u["id"], sv=u["sv"], ua=uahash(), csrf=secrets.token_urlsafe(32)); session.permanent = True
+    act("login", "social sign-in", uid=u["id"]); return redirect("/dashboard")
+
+def unique_username(base):
+    b = re.sub(r"[^A-Za-z0-9_]", "", base)[:16]; b = b if len(b) >= 3 else (b + "user")[:16]; n = b
+    while core.q("SELECT 1 FROM users WHERE username=? COLLATE NOCASE", (n,), one=True): n = f"{b}{secrets.randbelow(9000) + 1000}"
+    return n[:20]
+
+def set_email(uid, email):
+    em = (email or "").strip().lower()
+    if re.fullmatch(r"[^@\s]{1,64}@[^@\s]{1,120}", em) and not core.q("SELECT 1 FROM users WHERE email_hash=?", (core.email_hash(em),), one=True):
+        core.ex("UPDATE users SET email_enc=?, email_hash=? WHERE id=?", (core.esec(em), core.email_hash(em), uid))
+
+def set_discord(uid, sub, name):
+    if not core.q("SELECT 1 FROM users WHERE discord_id=?", (sub,), one=True): core.ex("UPDATE users SET discord_id=?, discord_name=? WHERE id=?", (sub, name, uid))
+
+@app.route("/oauth/<prov>")
+@limiter.limit("20/minute")
+def oauth_start(prov):
+    cfg = OAUTH.get(prov) or abort(404); cid, _ = oauth_cfg(prov)
+    if not cid: flash(f"{cfg['label']} sign-in is not set up yet.", "err"); return redirect("/login")
+    session.update(os=secrets.token_urlsafe(16), oprov=prov, olink=1 if me() else 0)
+    return redirect(cfg["auth"] + "?" + urlencode({"client_id": cid, "redirect_uri": f"https://{os.environ['DOMAIN']}/oauth/{prov}/callback", "response_type": "code", "scope": cfg["scope"], "state": session["os"]}))
+
+@app.route("/oauth/<prov>/callback")
+@limiter.limit("20/minute")
+def oauth_cb(prov):
+    cfg = OAUTH.get(prov) or abort(404)
+    st, sp, link = session.pop("os", None), session.pop("oprov", None), session.pop("olink", 0)
+    if not st or sp != prov or not secrets.compare_digest(st, request.args.get("state", "")): abort(400)
+    cid, sec = oauth_cfg(prov)
+    try:
+        t = requests.post(cfg["token"], data={"client_id": cid, "client_secret": sec, "grant_type": "authorization_code", "code": request.args.get("code", ""),
+                          "redirect_uri": f"https://{os.environ['DOMAIN']}/oauth/{prov}/callback"}, headers={"Accept": "application/json"}, timeout=12).json()
+        prof = requests.get(cfg["info"], headers={"Authorization": "Bearer " + t["access_token"], "Accept": "application/json"}, timeout=12).json()
+        sub = str(prof.get("sub") or prof["id"]); name = prof.get("login") or prof.get("username") or prof.get("name") or "user"; email = prof.get("email") or ""
+    except Exception: flash("Sign-in failed. Please try again.", "err"); return redirect("/login")
+    ident = core.q("SELECT user_id FROM identities WHERE provider=? AND subject=?", (prov, sub), one=True)
+    if link and me():
+        if ident and ident["user_id"] != me()["id"]: flash("That account is already linked to someone else.", "err")
+        else:
+            core.ex("INSERT OR IGNORE INTO identities(provider,subject,user_id) VALUES(?,?,?)", (prov, sub, me()["id"]))
+            if prov == "discord": set_discord(me()["id"], sub, name)
+            flash(f"{cfg['label']} linked.", "ok")
+        return redirect("/account")
+    if ident: u = core.q("SELECT * FROM users WHERE id=?", (ident["user_id"],), one=True)
+    else:
+        if core.setting("registration") != "1": flash("Registration is closed.", "err"); return redirect("/login")
+        uid = core.ex("INSERT INTO users(username,pw_hash,oauth_only) VALUES(?,?,1)", (unique_username(name), generate_password_hash(secrets.token_urlsafe(32))))
+        core.ex("INSERT INTO identities(provider,subject,user_id) VALUES(?,?,?)", (prov, sub, uid)); set_email(uid, email)
+        if prov == "discord": set_discord(uid, sub, name)
+        u = core.q("SELECT * FROM users WHERE id=?", (uid,), one=True)
+    return finish_login(u)
+
+@app.route("/admin/integrations", methods=["GET", "POST"])
+@login_required
+def integrations():
+    if request.method == "POST":
+        f = request.form
+        for k in ("oauth_google_id", "oauth_github_id", "daytona_url", "daytona_proxy", "daytona_snapshot", "cli_create", "cli_delete"): core.ex("INSERT OR REPLACE INTO settings VALUES(?,?)", (k, f.get(k, "").strip()[:300]))
+        for k in ("oauth_google_secret", "oauth_github_secret", "daytona_key"):
+            if f.get(k, "").strip(): core.ex("INSERT OR REPLACE INTO settings VALUES(?,?)", (k, core.esec(f[k].strip())))  # blank = keep the saved secret
+        core.ex("INSERT OR REPLACE INTO settings VALUES('test_provider',?)", (f.get("test_provider") if f.get("test_provider") in ("local", "daytona", "cli") else "local",))
+        for k, lo, hi, d in (("test_minutes", 5, 240, "30"), ("test_cooldown_h", 0, 168, "6"), ("test_max", 1, 200, "10")):
+            core.ex("INSERT OR REPLACE INTO settings VALUES(?,?)", (k, str(max(lo, min(hi, int(f.get(k, d)))) if f.get(k, d).isdigit() else d)))
+        act("admin", "integrations updated"); flash("Integrations saved.", "ok"); return redirect("/admin/integrations")
+    return render_template("integrations.html", s={k: core.setting(k) for k in core.DEFAULTS}, domain=os.environ["DOMAIN"], saved={k: bool(core.setting(k)) for k in ("oauth_google_secret", "oauth_github_secret", "daytona_key")})
+
+# ------------------------------------------------------------------------- public chat
+@app.route("/chat")
+@login_required
+def chat_page(): return render_template("chat.html", mod=core.has_perm(me(), "chat.moderate"))
+
+@app.route("/chat/poll")
+@login_required
+@limiter.limit("60/minute")
+def chat_poll():
+    a = request.args.get("after", "0"); a = int(a) if a.isdigit() else 0
+    rows = core.q("SELECT c.id, c.text, u.username, u.rank, u.is_admin FROM chat c JOIN users u ON u.id=c.user_id WHERE c.id>? ORDER BY c.id DESC LIMIT 60", (a,))
+    return jsonify(messages=[dict(id=r["id"], user=r["username"], rank=core.rank_name(r), color=core.rank_color(r), text=r["text"]) for r in reversed(rows)])
+
+@app.post("/chat/send")
+@login_required
+@limiter.limit("20/minute")
+def chat_send():
+    u = me(); txt = re.sub(r"[\x00-\x1f\x7f]", " ", request.form.get("text", "")).strip()[:300]
+    if (u["muted_until"] or 0) > time.time(): return jsonify(ok=False, error="You are timed out."), 403
+    if not txt: return jsonify(ok=False), 400
+    core.ex("INSERT INTO chat(user_id,text) VALUES(?,?)", (u["id"], txt)); core.ex("DELETE FROM chat WHERE id < (SELECT MAX(id) FROM chat) - 500"); return jsonify(ok=True)
+
+@app.post("/admin/chat/delete/<int:mid>")
+@login_required
+def chat_delete(mid): need("chat.moderate"); core.ex("DELETE FROM chat WHERE id=?", (mid,)); return jsonify(ok=True)
+
+# --------------------------------------------------------------------------- tickets
+CATS = ("general", "billing", "server", "bug", "report")
+@app.route("/tickets", methods=["GET", "POST"])
+@login_required
+@limiter.limit("30/minute")
+def tickets():
+    u = me()
+    if request.method == "POST":
+        subj, body = request.form.get("subject", "").strip()[:80], request.form.get("body", "").strip()[:2000]; cat = request.form.get("category") if request.form.get("category") in CATS else "general"
+        if not subj or not body: flash("Add a subject and a message.", "err")
+        elif core.q("SELECT COUNT(*) n FROM tickets WHERE user_id=? AND status='open'", (u["id"],), one=True)["n"] >= 5: flash("You already have 5 open tickets.", "err")
+        else:
+            tid = core.ex("INSERT INTO tickets(user_id,subject,category) VALUES(?,?,?)", (u["id"], subj, cat)); core.ex("INSERT INTO ticket_msgs(ticket_id,user_id,text,staff) VALUES(?,?,?,0)", (tid, u["id"], body))
+            core.alert("ticket", f"New ticket #{tid} from {u['username']}: {subj}"); return redirect(f"/tickets/{tid}")
+    return render_template("tickets.html", rows=core.q("SELECT * FROM tickets WHERE user_id=? ORDER BY id DESC", (u["id"],)), staff=False, cats=CATS)
+
+@app.route("/tickets/<int:tid>", methods=["GET", "POST"])
+@login_required
+@limiter.limit("60/minute")
+def ticket_view(tid):
+    u = me(); t = core.q("SELECT * FROM tickets WHERE id=?", (tid,), one=True) or abort(404); staff = core.has_perm(u, "tickets.reply")
+    if t["user_id"] != u["id"] and not staff: abort(404)
+    if request.method == "POST":
+        if request.form.get("do") == "close": core.ex("UPDATE tickets SET status='closed', updated=? WHERE id=?", (time.time(), tid))
+        elif request.form.get("text", "").strip():
+            core.ex("INSERT INTO ticket_msgs(ticket_id,user_id,text,staff) VALUES(?,?,?,?)", (tid, u["id"], request.form["text"].strip()[:2000], 1 if staff and t["user_id"] != u["id"] else 0))
+            core.ex("UPDATE tickets SET status='open', updated=? WHERE id=?", (time.time(), tid))
+        return redirect(f"/tickets/{tid}")
+    return render_template("ticket.html", t=t, staff=staff, msgs=core.q("SELECT m.*, u.username, u.rank, u.is_admin FROM ticket_msgs m JOIN users u ON u.id=m.user_id WHERE ticket_id=? ORDER BY m.id", (tid,)))
+
+@app.route("/admin/tickets")
+@login_required
+def admin_tickets():
+    need("tickets.reply")
+    return render_template("tickets.html", staff=True, cats=CATS, rows=core.q("SELECT t.*, u.username FROM tickets t JOIN users u ON u.id=t.user_id ORDER BY (t.status='open') DESC, t.updated DESC LIMIT 200"))
+
+# ------------------------------------------------------------------------- test lab
+def render_test(out=None, cmd=""):
+    u = me(); providers.sweep()
+    active = core.q("SELECT * FROM tests WHERE user_id=? AND status='active' ORDER BY id DESC LIMIT 1", (u["id"],), one=True)
+    last = core.q("SELECT created_at FROM tests WHERE user_id=? ORDER BY id DESC LIMIT 1", (u["id"],), one=True)
+    wait = 0 if core.has_perm(u, "vps.create_any") or not last else max(0, last["created_at"] + int(core.setting("test_cooldown_h") or 6) * 3600 - time.time())
+    return render_template("test.html", active=active, wait=int(wait), minutes=core.setting("test_minutes"), provider=core.setting("test_provider"), out=out, cmd=cmd,
+                           left=int(active["expires_at"] - time.time()) if active else 0, history=core.q("SELECT * FROM tests WHERE user_id=? ORDER BY id DESC LIMIT 8", (u["id"],)))
+
+@app.route("/test")
+@login_required
+def test_lab(): return render_test()
+
+@app.post("/test/start")
+@login_required
+@limiter.limit("5/hour")
+def test_start():
+    u = me(); providers.sweep()
+    if core.q("SELECT 1 FROM tests WHERE user_id=? AND status='active'", (u["id"],), one=True): flash("You already have a running test server.", "err"); return redirect("/test")
+    if core.q("SELECT COUNT(*) n FROM tests WHERE status='active'", one=True)["n"] >= int(core.setting("test_max") or 10): flash("The test lab is full right now. Try again soon.", "err"); return redirect("/test")
+    last = core.q("SELECT created_at FROM tests WHERE user_id=? ORDER BY id DESC LIMIT 1", (u["id"],), one=True)
+    if last and not core.has_perm(u, "vps.create_any") and last["created_at"] + int(core.setting("test_cooldown_h") or 6) * 3600 > time.time(): flash("Test servers have a cooldown. Please wait.", "err"); return redirect("/test")
+    prov, mins = core.setting("test_provider") or "local", int(core.setting("test_minutes") or 30); name = f"anz-test-{secrets.token_hex(3)}"
+    try: r = providers.create(prov, name, mins)
+    except Exception as e: flash(f"Could not start a test server: {str(e)[:160]}", "err"); return redirect("/test")
+    core.ex("INSERT INTO tests(user_id,provider,remote_id,name,info,expires_at) VALUES(?,?,?,?,?,?)", (u["id"], prov, r["remote_id"], name, r["info"], time.time() + mins * 60))
+    act("test", f"started on {prov}"); flash(f"Test server ready for {mins} minutes.", "ok"); return redirect("/test")
+
+def my_test(tid): return core.q("SELECT * FROM tests WHERE id=? AND user_id=? AND status='active'", (tid, me()["id"]), one=True) or abort(404)
+
+@app.post("/test/<int:tid>/stop")
+@login_required
+def test_stop(tid):
+    t = my_test(tid)
+    try: providers.delete(t["provider"], t["remote_id"])
+    except Exception: pass
+    core.ex("UPDATE tests SET status='stopped' WHERE id=?", (tid,)); flash("Test server deleted.", "ok"); return redirect("/test")
+
+@app.post("/test/<int:tid>/exec")
+@login_required
+@limiter.limit("30/minute")
+def test_exec(tid):
+    t = my_test(tid); cmd = request.form.get("cmd", "")[:400]
+    try: out = providers.run_cmd(t["provider"], t["remote_id"], cmd) or "(no output)"
+    except Exception as e: out = f"error: {e}"
+    return render_test(out, cmd)
+
+# ------------------------------------------------------------------------ easy nodes
+def nodes_view():
+    rows = [dict(n=n, local=not n["url"], used=core.node_used(n["id"]), caps=json.loads(n["caps"] or "{}")) for n in core.q("SELECT * FROM nodes ORDER BY (url='') DESC, id")]
+    return render_template("admin_nodes.html", rows=rows, cmd=session.pop("join_cmd", None))
+app.view_functions["admin_nodes"] = nodes_view  # replaces the v3 page
+
+@app.post("/admin/nodes/join")
+@login_required
+def nodes_join():
+    u = need("nodes.manage"); tok = "arz-join-" + secrets.token_urlsafe(24)
+    core.ex("DELETE FROM tokens WHERE scope='node' AND expires_at<?", (time.time(),))
+    core.ex("INSERT INTO tokens(user_id,name,hash,scope,expires_at) VALUES(?,?,?,?,?)", (u["id"], "node-join", hashlib.sha256(tok.encode()).hexdigest(), "node", time.time() + 3600))
+    url = os.getenv("INSTALL_URL") or "https://raw.githubusercontent.com/ArizNodesOp/ariznodes-hvm/main/install.sh"
+    session["join_cmd"] = f"curl -fsSL {url} | sudo bash -s -- --node --panel-url https://{os.environ['DOMAIN']} --panel-key {tok}"
+    act("admin", "created a node join command"); return redirect("/admin/nodes")
+
+@app.route("/admin/nodes/guide")
+@login_required
+def nodes_guide(): need("nodes.view"); return render_template("node_guide.html", domain=os.environ["DOMAIN"], install_url=os.getenv("INSTALL_URL") or "https://raw.githubusercontent.com/ArizNodesOp/ariznodes-hvm/main/install.sh")
+
+# ------------------------------------------------------------------ theme, nav, emoji, centred Discord card
+b = T["base.html"]
+b = re.sub(r'<nav class="nav">.*?</nav>', lambda m: '''<nav class="nav">{% if p.startswith('/admin') %}<div class="tag" style="margin:0 10px 8px;color:var(--pri-h)">Staff console</div>
+<a href="/admin" class="{{ 'on' if p == '/admin' }}"><i class="em">&#128202;</i><span>Overview</span></a>{% if can('nodes.view') %}<a href="/admin/nodes" class="{{ 'on' if p.startswith('/admin/nodes') }}"><i class="em">&#127760;</i><span>Nodes</span></a>{% endif %}
+<a href="/admin/more" class="{{ 'on' if p.startswith('/admin/more') or p.startswith('/admin/user') }}"><i class="em">&#129520;</i><span>Servers and users</span></a>
+{% if can('users.rank') %}<a href="/admin/ranks" class="{{ 'on' if p.startswith('/admin/ranks') }}"><i class="em">&#127894;</i><span>Ranks</span></a>{% endif %}
+{% if can('tickets.reply') %}<a href="/admin/tickets" class="{{ 'on' if p.startswith('/admin/tickets') }}"><i class="em">&#127915;</i><span>Tickets</span></a>{% endif %}
+{% if can('security.manage') %}<a href="/admin/security" class="{{ 'on' if p.startswith('/admin/security') }}"><i class="em">&#128274;</i><span>Security</span></a>{% endif %}
+{% if can('integrations.manage') %}<a href="/admin/integrations" class="{{ 'on' if p.startswith('/admin/integrations') }}"><i class="em">&#128268;</i><span>Integrations</span></a>{% endif %}
+<a href="/dashboard"><i class="em">&#8617;&#65039;</i><span>Back to panel</span></a>{% else %}
+<a href="/dashboard" class="{{ 'on' if p == '/dashboard' }}"><i class="em">&#127968;</i><span>Dashboard</span></a><a href="/servers" class="{{ 'on' if p.startswith('/servers') or p.startswith('/v/') or p.startswith('/vps') }}"><i class="em">&#128421;&#65039;</i><span>Servers</span></a>
+<a href="/deploy" class="{{ 'on' if p == '/deploy' }}"><i class="em">&#128640;</i><span>Deploy</span></a><a href="/test" class="{{ 'on' if p.startswith('/test') }}"><i class="em">&#129514;</i><span>Test lab</span></a>
+<a href="/chat" class="{{ 'on' if p == '/chat' }}"><i class="em">&#128172;</i><span>Chat</span></a><a href="/tickets" class="{{ 'on' if p.startswith('/tickets') }}"><i class="em">&#127915;</i><span>Tickets</span></a>
+<a href="/rewards" class="{{ 'on' if p == '/rewards' }}"><i class="em">&#127873;</i><span>Rewards</span></a><a href="/leaderboard" class="{{ 'on' if p == '/leaderboard' }}"><i class="em">&#127942;</i><span>Leaderboard</span></a>
+<a href="/tutorial" class="{{ 'on' if p == '/tutorial' }}"><i class="em">&#128214;</i><span>Tutorial</span></a><a href="/api" class="{{ 'on' if p == '/api' }}"><i class="em">&#128268;</i><span>API</span></a>
+<a href="/account" class="{{ 'on' if p.startswith('/account') }}"><i class="em">&#128100;</i><span>Account</span></a>{% if me.is_admin %}<a href="/admin"><i class="em">&#128737;&#65039;</i><span>Staff</span></a>{% endif %}{% endif %}</nav>''', b, count=1, flags=re.S)
+b = b.replace("<b>{{ me.username }}</b>", '<b>{{ me.username }}<small class="rk" style="color:{{ rank_color }}">{{ rank_name }}</small></b>', 1)
+b = b.replace("['cyber', 'crimson', 'matrix', 'sunset', 'ocean']", "['cyber', 'neon', 'crimson', 'matrix', 'sunset', 'ocean']", 1)
+b = b.replace('<canvas id="bgfx" aria-hidden="true"></canvas>', '<canvas id="bgfx" aria-hidden="true"></canvas><div class="aurora" aria-hidden="true"><i></i><i></i></div>', 1)
+b = b.replace("</style>", """[data-theme=neon]{--pri:#ff2bd6;--pri-h:#ff6ae6;--b:#00f0ff;--glow:#ff2bd655}.sw[data-t=neon]{background:#ff2bd6}
+.aurora{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}.aurora i{position:absolute;width:46vmax;height:46vmax;border-radius:50%;filter:blur(90px);opacity:.15;animation:flo 22s ease-in-out infinite alternate}
+.aurora i:first-child{background:var(--pri);top:-18vmax;left:-10vmax}.aurora i:last-child{background:var(--b);bottom:-22vmax;right:-12vmax;animation-delay:-9s}@keyframes flo{to{transform:translate(8vmax,6vmax) scale(1.15)}}
+.btn:not(.ghost),button:not(.ghost):not(.red):not(.lnk):not(.sw){position:relative;overflow:hidden}
+.btn:not(.ghost):after,button:not(.ghost):not(.red):not(.lnk):not(.sw):after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 40%,#ffffff45 50%,transparent 60%);transform:translateX(-120%);transition:transform .6s}
+.btn:not(.ghost):hover:after,button:not(.ghost):not(.red):not(.lnk):not(.sw):hover:after{transform:translateX(120%)}
+.card{background:linear-gradient(180deg,#ffffff08,transparent 45%),var(--s1)}.nav a.on{box-shadow:inset 0 0 0 1px var(--pri),0 0 22px -8px var(--glow)}
+.em{font-style:normal;width:24px;display:inline-grid;place-items:center;font-size:16px;line-height:1;flex:none}.rk{display:block;font-size:11px;font-weight:700;line-height:1.1}
+.ctr{align-items:center;text-align:center;justify-content:center}.ctr .big{margin:4px 0 8px}.oauth{display:grid;gap:8px;margin:14px 0}.oauth .btn{justify-content:center}
+#msgs{height:52vh;overflow:auto;padding-right:6px}.msg{padding:7px 0;border-bottom:1px solid var(--ln);word-break:break-word}.msg .x{float:right}
+.diag{width:100%;max-width:760px;display:block;margin:6px auto 16px}.diag .box rect{fill:var(--s2);stroke:var(--ln)}.diag text{fill:var(--tx);text-anchor:middle;font:600 14px system-ui}.diag .sm{font-size:11px;fill:var(--mut);font-weight:400}
+.diag .wire{stroke:var(--pri-h);stroke-width:2;stroke-dasharray:6 6;fill:none;animation:dsh 1s linear infinite}@keyframes dsh{to{stroke-dashoffset:-12}}.diag .pkt{fill:var(--b)}
+@keyframes gsin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}.gs{animation:gsin .5s both}.gs:nth-of-type(1){animation-delay:.1s}.gs:nth-of-type(2){animation-delay:.25s}.gs:nth-of-type(3){animation-delay:.4s}.gs:nth-of-type(4){animation-delay:.55s}.gs:nth-of-type(5){animation-delay:.7s}.gs:nth-of-type(6){animation-delay:.85s}
+</style>""", 1)
+T["base.html"] = b
+T["auth.html"] = T["auth.html"].replace('<p class="mut" style="margin-bottom:0">', '''{% set ops = oauth_providers() %}{% if ops %}<div class="oauth">{% for k, l in ops %}<a class="btn ghost" href="/oauth/{{ k }}">{{ {'google': '&#128269;', 'github': '&#128025;', 'discord': '&#127918;'}[k]|safe }} Continue with {{ l }}</a>{% endfor %}</div>{% endif %}
+<p class="mut" style="margin-bottom:0">''', 1).replace("<label>Password</label>", "{% if mode == 'register' %}<label>Email (optional)</label><input name=\"email\" type=\"email\" maxlength=\"120\" autocomplete=\"email\">{% endif %}<label>Password</label>", 1).replace("<label>Username</label>", "<label>{{ 'Username' if mode == 'register' else 'Username or email' }}</label>", 1)
+T["dash.html"] = T["dash.html"].replace('<div class="card stat"><span class="mut">Discord</span>', '<div class="card stat ctr"><span class="mut">Discord</span>', 1).replace("Hello, {{ me.username }}", "&#128075; Hello, {{ me.username }}", 1)
+
+TH = '{% extends "base.html" %}{% block body %}'
+T["chat.html"] = TH + r'''<div class="ph"><h1 style="font-size:1.7rem">&#128172; Public chat</h1><p>Be kind. Staff can time out or remove messages.</p></div><div class="card"><div id="msgs"></div>
+<form id="cf" class="acts" style="margin-top:12px"><input name="text" id="tx" maxlength="300" placeholder="Say something..." autocomplete="off" style="margin:0;flex:1" required><button>Send</button></form></div>
+<script nonce="{{ nonce }}">let last=0;const box=document.getElementById('msgs'),mod={{ 'true' if mod else 'false' }},csrf="{{ csrf }}";
+function add(m){const d=document.createElement('div');d.className='msg';d.dataset.id=m.id;const b=document.createElement('b');b.textContent=m.user;b.style.color=m.color;const t=document.createElement('span');t.className='tag';t.textContent=m.rank;const x=document.createElement('span');x.textContent=' '+m.text;d.append(b,' ',t,x);
+if(mod){const e=document.createElement('button');e.className='lnk x';e.textContent='delete';e.onclick=async()=>{const f=new FormData();f.append('csrf',csrf);await fetch('/admin/chat/delete/'+m.id,{method:'POST',body:f});d.remove()};d.append(e)}box.append(d)}
+async function poll(){try{const j=await (await fetch('/chat/poll?after='+last)).json();const near=box.scrollHeight-box.scrollTop-box.clientHeight<80;for(const m of j.messages){last=Math.max(last,m.id);add(m)}if(j.messages.length&&near)box.scrollTop=box.scrollHeight}catch(e){}}
+document.getElementById('cf').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);f.append('csrf',csrf);const r=await fetch('/chat/send',{method:'POST',body:f});if(r.ok){e.target.reset();poll()}else{const j=await r.json().catch(()=>({}));alert(j.error||'Could not send')}};
+poll().then(()=>box.scrollTop=box.scrollHeight);setInterval(()=>{if(!document.hidden)poll()},3000);</script>{% endblock %}'''
+
+T["tickets.html"] = TH + r'''<div class="ph"><h1 style="font-size:1.7rem">&#127915; {{ 'All tickets' if staff else 'Support tickets' }}</h1><p>{{ 'Open tickets first.' if staff else 'Need help? Open a ticket and staff will reply.' }}</p></div>
+{% if not staff %}<div class="card"><form method="post" action="/tickets"><input type="hidden" name="csrf" value="{{ csrf }}"><div class="grid"><div><label>Subject</label><input name="subject" maxlength="80" required></div><div><label>Category</label><select name="category">{% for c in cats %}<option>{{ c }}</option>{% endfor %}</select></div></div>
+<label>Message</label><textarea name="body" rows="4" maxlength="2000" required style="width:100%;background:var(--s2);color:var(--tx);border:1px solid var(--ln);border-radius:6px;padding:10px;margin:5px 0 12px"></textarea><button>Open ticket</button></form></div>{% endif %}
+<h2>{{ 'Tickets' if staff else 'Your tickets' }}</h2><div class="units">{% for t in rows %}<a class="unit {{ 'running' if t.status == 'open' else '' }}" href="/tickets/{{ t.id }}"><i class="dot"></i><b>#{{ t.id }} {{ t.subject }}</b><span>{{ t.category }}{% if staff %}, {{ t.username }}{% endif %}</span><em>{{ t.status }}</em></a>
+{% else %}<div class="empty">No tickets yet.</div>{% endfor %}</div>{% endblock %}'''
+
+T["ticket.html"] = TH + r'''<p><a href="{{ '/admin/tickets' if staff and t.user_id != me.id else '/tickets' }}">&larr; Back</a></p><div class="ph"><h1 style="font-size:1.6rem">#{{ t.id }} {{ t.subject }} <span class="tag">{{ t.status }}</span></h1></div>
+<div class="card">{% for m in msgs %}<div class="msg"><b>{{ m.username }}</b> <span class="tag">{{ 'Staff' if m.staff else 'User' }}</span> <span class="mut">{{ m.created_at|ts }}</span><div style="margin-top:4px;white-space:pre-wrap">{{ m.text }}</div></div>{% endfor %}
+<form method="post" style="margin-top:14px"><input type="hidden" name="csrf" value="{{ csrf }}"><textarea name="text" rows="3" maxlength="2000" required style="width:100%;background:var(--s2);color:var(--tx);border:1px solid var(--ln);border-radius:6px;padding:10px;margin-bottom:10px"></textarea>
+<div class="acts"><button>Reply</button><button class="ghost" name="do" value="close" formnovalidate>Close ticket</button></div></form></div>{% endblock %}'''
+
+T["test.html"] = TH + r'''<div class="ph"><h1 style="font-size:1.7rem">&#129514; Test lab</h1><p>Free throwaway servers for trying things out. No invites needed. They delete themselves after {{ minutes }} minutes.</p></div>
+{% if active %}<div class="card"><div class="acts"><b class="mono">{{ active.name }}</b><span class="tag">{{ active.provider }}</span><span class="tag" id="left">{{ left // 60 }} min left</span></div>
+<p class="mut">Connection</p><pre>{{ active.info }}</pre><form method="post" action="/test/{{ active.id }}/exec" class="acts"><input type="hidden" name="csrf" value="{{ csrf }}"><input name="cmd" value="{{ cmd }}" placeholder="uname -a" maxlength="400" style="margin:0;flex:1" required><button>Run</button></form>
+{% if out is not none %}<pre>{{ out }}</pre>{% endif %}<form method="post" action="/test/{{ active.id }}/stop" class="inl" data-confirm="Delete this test server now?"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="red">Delete now</button></form></div>
+{% else %}<div class="card ctr stat"><div class="big">{{ '&#9203;' | safe }} {{ 'Ready when you are' if not wait else 'Cooldown' }}</div>{% if wait %}<p class="mut">Next test server in {{ wait // 3600 }}h {{ wait % 3600 // 60 }}m.</p>{% else %}<form method="post" action="/test/start"><input type="hidden" name="csrf" value="{{ csrf }}"><button>&#128640; Start a test server</button></form><p class="mut">Provider: {{ provider }}</p>{% endif %}</div>{% endif %}
+<h2>History</h2><div class="card"><table>{% for h in history %}<tr><td class="mono">{{ h.name }}</td><td>{{ h.provider }}</td><td class="mut">{{ h.status }}</td><td class="mut">{{ h.created_at|ts }}</td></tr>{% else %}<tr><td class="mut">Nothing yet.</td></tr>{% endfor %}</table></div>
+<script nonce="{{ nonce }}">document.querySelectorAll('form[data-confirm]').forEach(f=>f.addEventListener('submit',e=>{if(!confirm(f.dataset.confirm))e.preventDefault()}));</script>{% endblock %}'''
+
+T["ranks.html"] = TH + r'''<div class="ph"><h1 style="font-size:1.7rem">&#127894;&#65039; Ranks and roles</h1><p>You can only change people ranked below you. Timeouts mute people in chat.</p></div>
+<div class="card" style="overflow:auto"><table><tr><th>User</th><th>Rank</th><th>Change</th><th>Timeout</th></tr>{% for u in users %}{% set r = (u.rank or (10 if u.is_admin else 0)) %}<tr><td>{{ u.username }}</td><td><b style="color:{{ ranks[r][1] }}">{{ ranks[r][0] }}</b></td><td>
+{% if u.id != me.id and (r < mine or mine == 11) %}<form method="post" action="/admin/ranks/set" class="inl"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="uid" value="{{ u.id }}"><select name="rank">{% for i in allowed %}<option value="{{ i }}" {{ 'selected' if i == r }}>{{ ranks[i][0] }}</option>{% endfor %}</select><button class="ghost">Set</button></form>{% else %}<span class="mut">-</span>{% endif %}</td><td>
+{% if can('users.timeout') and u.id != me.id and (r < mine) %}<form method="post" action="/admin/timeout/{{ u.id }}" class="inl"><input type="hidden" name="csrf" value="{{ csrf }}"><select name="minutes"><option value="10">10 min</option><option value="60">1 hour</option><option value="1440">1 day</option><option value="0">Clear</option></select><button class="ghost">Apply</button></form>{% endif %}</td></tr>{% endfor %}</table></div>
+<h2>What each rank gets</h2><div class="card"><table><tr><td>Member</td><td class="mut">Everyone. Plans by invites.</td></tr><tr><td>Special</td><td class="mut">+1 server slot and a colored badge.</td></tr><tr><td>VIP / VIP+</td><td class="mut">Basic / Medium plan unlocked without invites, +1 slot.</td></tr><tr><td>MVP+ / MVP++</td><td class="mut">Large / Pro plan unlocked, +2 slots.</td></tr>
+<tr><td>T.Mod, Mod, Admin</td><td class="mut">Ban, timeout, moderate chat, answer tickets, create any server.</td></tr><tr><td>Sr. Admin</td><td class="mut">Plus manage servers, grant bonus invites, set ranks below them, view nodes, export.</td></tr><tr><td>Head Manager</td><td class="mut">Everything except changing the Main Owner.</td></tr><tr><td>Main Owner</td><td class="mut">Full control over every rank.</td></tr></table></div>{% endblock %}'''
+
+T["integrations.html"] = TH + r'''<div class="ph"><h1 style="font-size:1.7rem">&#128268; Integrations</h1><p>Social login and test-lab providers. Secrets are encrypted in the database and never shown again.</p></div>
+<form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><div class="card"><h3 style="margin-top:0">Sign-in buttons</h3><p class="mut">Redirect URIs to register: <code>https://{{ domain }}/oauth/google/callback</code>, <code>https://{{ domain }}/oauth/github/callback</code>, <code>https://{{ domain }}/oauth/discord/callback</code> (Discord uses your bot's application).</p>
+<div class="grid"><div><label>Google client ID</label><input name="oauth_google_id" value="{{ s.oauth_google_id }}"></div><div><label>Google client secret</label><input name="oauth_google_secret" type="password" placeholder="{{ 'saved (leave blank to keep)' if saved.oauth_google_secret else '' }}"></div>
+<div><label>GitHub client ID</label><input name="oauth_github_id" value="{{ s.oauth_github_id }}"></div><div><label>GitHub client secret</label><input name="oauth_github_secret" type="password" placeholder="{{ 'saved (leave blank to keep)' if saved.oauth_github_secret else '' }}"></div></div></div>
+<h2>Test lab</h2><div class="card"><div class="grid"><div><label>Provider</label><select name="test_provider">{% for k, l in [('local', 'Local Docker container'), ('daytona', 'Daytona sandboxes'), ('cli', 'Custom CLI / API wrapper')] %}<option value="{{ k }}" {{ 'selected' if s.test_provider == k }}>{{ l }}</option>{% endfor %}</select></div>
+<div><label>Minutes per test</label><input name="test_minutes" value="{{ s.test_minutes }}"></div><div><label>Cooldown hours per user</label><input name="test_cooldown_h" value="{{ s.test_cooldown_h }}"></div><div><label>Max running at once</label><input name="test_max" value="{{ s.test_max }}"></div></div></div>
+<h2>Daytona</h2><div class="card"><div class="grid"><div><label>API key</label><input name="daytona_key" type="password" placeholder="{{ 'saved (leave blank to keep)' if saved.daytona_key else 'from app.daytona.io' }}"></div><div><label>API URL (optional)</label><input name="daytona_url" value="{{ s.daytona_url }}" placeholder="https://app.daytona.io/api"></div>
+<div><label>Toolbox proxy (optional)</label><input name="daytona_proxy" value="{{ s.daytona_proxy }}" placeholder="https://proxy.app.daytona.io"></div><div><label>Snapshot (optional)</label><input name="daytona_snapshot" value="{{ s.daytona_snapshot }}"></div></div></div>
+<h2>Custom CLI provider</h2><div class="card"><p class="mut">Any provider with a CLI or API wrapper. Commands run without a shell; <code>{name}</code> and <code>{id}</code> are replaced. If the output contains an <code>ssh ...</code> line or a URL it is shown to the user.</p>
+<label>Create command</label><input name="cli_create" value="{{ s.cli_create }}" placeholder="mycli create --name {name}"><label>Delete command</label><input name="cli_delete" value="{{ s.cli_delete }}" placeholder="mycli delete {id}"></div>
+<div class="acts" style="margin-top:16px"><button>Save integrations</button></div></form>{% endblock %}'''
+
+T["admin_nodes.html"] = TH + r'''<div class="ph"><h1 style="font-size:1.7rem">&#127760; Nodes</h1><p>Every node holds up to its slot count of servers. The panel picks the node with the most free slots for each server type.</p></div>
+<div class="acts" style="margin-bottom:14px">{% if can('nodes.manage') %}<form method="post" action="/admin/nodes/join" class="inl"><input type="hidden" name="csrf" value="{{ csrf }}"><button>&#10133; Add a node (one command)</button></form>{% endif %}<a class="btn ghost" href="/admin/nodes/guide">&#127912; Visual guide</a></div>
+{% if cmd %}<div class="card" style="margin-bottom:14px"><h3 style="margin-top:0">Run this on the new server (valid 1 hour, one use)</h3><pre style="white-space:pre-wrap;word-break:break-all">{{ cmd }}</pre><p class="mut">It installs everything and registers itself. Next: create its Cloudflare tunnel (see the guide).</p></div>{% endif %}
+<div class="card" style="overflow:auto"><table><tr><th>Node</th><th>Domain</th><th>Type</th><th>Slots</th><th>Actions</th></tr>{% for r in rows %}<tr><td><i class="dot {{ 'on' if r.n.enabled else 'off' }}"></i>{{ r.n.name }}</td><td class="mono mut" style="font-size:12px">{{ r.n.domain or r.n.url }}</td>
+<td>{% if r.local %}<span class="tag">built-in {{ r.n.kind }}</span>{% else %}{% for k in ['docker', 'lxc', 'kvm'] %}{% if r.caps.get(k) %}<span class="tag">{{ k }}</span> {% endif %}{% endfor %}{% endif %}</td><td>{{ r.used }} / {{ r.n.slots }}</td><td>{% if can('nodes.manage') %}
+<form method="post" action="/admin/nodes/slots" class="inl"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="id" value="{{ r.n.id }}"><input name="slots" value="{{ r.n.slots }}" style="width:70px"><button class="ghost">Set slots</button></form>
+{% if not r.local %}<form method="post" action="/admin/nodes/ping" class="inl"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="id" value="{{ r.n.id }}"><button class="ghost">Test</button></form>{% endif %}
+<form method="post" action="/admin/nodes/toggle" class="inl"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="id" value="{{ r.n.id }}"><button class="ghost">{{ 'Disable' if r.n.enabled else 'Enable' }}</button></form>
+{% if not r.local %}<form method="post" action="/admin/nodes/remove" class="inl" data-confirm="Remove this node?"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="id" value="{{ r.n.id }}"><button class="red">Remove</button></form>{% endif %}{% endif %}</td></tr>{% endfor %}</table></div>
+{% if can('nodes.manage') %}<details class="card" style="margin-top:14px"><summary style="cursor:pointer;font-weight:600">Add a node by hand</summary><p class="mut">Only needed if automatic registration failed. Use the URL and key the installer printed.</p>
+<form method="post" action="/admin/nodes/add"><input type="hidden" name="csrf" value="{{ csrf }}"><div class="grid"><div><label>Name</label><input name="name" required></div><div><label>Node URL</label><input name="url" placeholder="https://node1.example.com" required></div>
+<div><label>Node key</label><input name="key" type="password" required></div><div><label>Slots</label><input name="slots" value="10"></div></div><button>Add node</button></form></details>{% endif %}
+<script nonce="{{ nonce }}">document.querySelectorAll('form[data-confirm]').forEach(f=>f.addEventListener('submit',e=>{if(!confirm(f.dataset.confirm))e.preventDefault()}));</script>{% endblock %}'''
+
+T["node_guide.html"] = TH + r'''<div class="ph"><h1 style="font-size:1.7rem">&#127912; How to add a node</h1><p>Six steps. Your panel already has built-in Docker, LXC and KVM nodes with 10 slots each; remote nodes add more capacity.</p></div>
+<svg class="diag" viewBox="0 0 720 200" role="img" aria-label="Panel talks to Cloudflare, which talks to the node"><g class="box"><rect x="10" y="60" width="170" height="80" rx="12"/><text x="95" y="96">Your panel</text><text x="95" y="118" class="sm">{{ domain }}</text></g>
+<g class="box"><rect x="275" y="60" width="170" height="80" rx="12"/><text x="360" y="96">Cloudflare</text><text x="360" y="118" class="sm">tunnel + domain</text></g><g class="box"><rect x="540" y="60" width="170" height="80" rx="12"/><text x="625" y="96">New node</text><text x="625" y="118" class="sm">agent on port 8081</text></g>
+<path class="wire" d="M180 100H275"/><path class="wire" d="M445 100H540"/><circle class="pkt" r="5"><animateMotion dur="1.8s" repeatCount="indefinite" path="M180 100H275"/></circle><circle class="pkt" r="5"><animateMotion dur="1.8s" begin=".9s" repeatCount="indefinite" path="M445 100H540"/></circle></svg>
+<div class="card gs"><b>1. Make the join command</b><p class="mut" style="margin:4px 0 0">Admin &rarr; Nodes &rarr; <b>Add a node (one command)</b>. Copy the command. It works for 1 hour, one time.</p></div>
+<div class="card gs" style="margin-top:10px"><b>2. Run it on the new server</b><p class="mut">Ubuntu 22.04/24.04 or Debian 12, as root. It installs Docker, LXD and the agent for you.</p><pre>curl -fsSL {{ install_url }} | sudo bash -s -- --node --panel-url https://{{ domain }} --panel-key arz-join-...</pre></div>
+<div class="card gs" style="margin-top:10px"><b>3. Create the node's Cloudflare tunnel</b><p class="mut" style="margin:4px 0 0">Cloudflare dashboard &rarr; <b>Zero Trust</b> &rarr; <b>Networks</b> &rarr; <b>Tunnels</b> &rarr; <b>Create a tunnel</b> &rarr; Cloudflared &rarr; name it <code>node1</code>. Copy the <b>token</b> and paste it when the installer asks.</p></div>
+<div class="card gs" style="margin-top:10px"><b>4. Connect the node's domain</b><p class="mut" style="margin:4px 0 0">In that tunnel open <b>Public Hostname</b> &rarr; <b>Add</b>. Subdomain <code>node1</code>, your domain, Service type <b>HTTP</b>, URL <code>localhost:8081</code>. Cloudflare creates the DNS record by itself. (Domain not on Cloudflare yet? Add the site in Cloudflare and set the nameservers it gives you at your registrar.)</p></div>
+<div class="card gs" style="margin-top:10px"><b>5. Tell the installer the node's URL</b><p class="mut" style="margin:4px 0 0">When asked for "Public URL of THIS node", enter <code>https://node1.yourdomain.com</code>. The installer then registers the node with this panel.</p></div>
+<div class="card gs" style="margin-top:10px"><b>6. Check it</b><p class="mut">Open <code>https://node1.yourdomain.com/agent/ping</code>. You should see <code>"agent":"ariznodes"</code>. The node shows up under Admin &rarr; Nodes with slots ready. If not, run <code>sudo ariznodes node-test</code> on the node.</p></div>
+<p><a class="btn ghost" href="/admin/nodes">Back to nodes</a></p>{% endblock %}'''
+PYHUB
 
 cat > "$APP/v3.py" <<'PYV3'
 """Ariznodes HVM v3: multi-page UI, nodes + API portal, tighter security, LXC advanced, red theme."""
@@ -1812,9 +2325,9 @@ def security_gate():
 @app.route("/deploy")
 @login_required
 def deploy():
-    u = me(); n = core.valid_invites(u["discord_id"]) if u["discord_id"] else 0; plan = core.plan_for(n)
+    u = me(); n = core.valid_invites(u["discord_id"]) if u["discord_id"] else 0; n = max(n, core.rank_floor(u)); plan = core.plan_for(n)
     owned = core.q("SELECT COUNT(*) n FROM vps WHERE user_id=? AND status!='failed'", (u["id"],), one=True)["n"]
-    allowed = max(int(core.setting("max_vps")), core.PLANS[plan]["slots"]) if plan else 0
+    allowed = max(int(core.setting("max_vps")), core.PLANS[plan]["slots"]) + core.rank_slots(u) if plan else 0
     return render_template("deploy.html", n=n, plan=plan, owned=owned, allowed=allowed)
 
 @app.route("/servers")
@@ -1859,7 +2372,7 @@ def add_node(name, url, key, slots):
 @app.get("/api/v1/ping")
 @limiter.limit("30/minute")
 def api_ping():
-    u = api_user()
+    u = api_user(("full", "node"))
     if not u: return jsonify(ok=False, error="unauthorized"), 401
     ver = open("/opt/ariznodes/VERSION").read().strip() if os.path.exists("/opt/ariznodes/VERSION") else "3"
     return jsonify(ok=True, panel="Ariznodes HVM", version=ver, admin=bool(u["is_admin"]), user=u["username"])
@@ -1867,12 +2380,14 @@ def api_ping():
 @app.post("/api/v1/nodes/register")
 @limiter.limit("10/minute")
 def api_register():
-    u = api_user()
-    if not u or not u["is_admin"]: return jsonify(ok=False, error="an admin API key is required"), 401
+    u = api_user(("full", "node"))
+    if not u or not core.has_perm(u, "nodes.manage"): return jsonify(ok=False, error="an admin API key is required"), 401
     d = request.get_json(silent=True) or {}
     try: add_node(str(d.get("name", "")), str(d.get("url", "")), str(d.get("agent_key", "")), d.get("slots", 10))
     except (ValueError, TypeError) as e: return jsonify(ok=False, error=str(e)), 400
-    core.ex("INSERT INTO activity(user_id,action,detail) VALUES(?,?,?)", (u["id"], "node", "registered " + str(d.get("name"))[:40])); return jsonify(ok=True)
+    core.ex("INSERT INTO activity(user_id,action,detail) VALUES(?,?,?)", (u["id"], "node", "registered " + str(d.get("name"))[:40]))
+    if u["tscope"] == "node": core.ex("DELETE FROM tokens WHERE id=?", (u["tid"],))  # join tokens work once
+    return jsonify(ok=True)
 
 def node_rows():
     out = []
@@ -2097,7 +2612,7 @@ def login_2fa():
         session["t2"] = session.get("t2", 0) + 1
         if session["t2"] > 6: session.clear(); flash("Too many wrong codes. Log in again.", "err"); return redirect("/login")
         u = core.q("SELECT * FROM users WHERE id=?", (uid,), one=True)
-        if u and u["totp_on"] and not u["banned"] and totp_ok(u["totp_secret"], request.form.get("code")):
+        if u and u["totp_on"] and not u["banned"] and totp_ok(core.dsec(u["totp_secret"]), request.form.get("code")):
             session.clear(); session.update(uid=u["id"], sv=u["sv"], ua=uahash(), csrf=secrets.token_urlsafe(32)); session.permanent = True
             act("login", "2FA verified", uid=u["id"]); return redirect("/dashboard")
         flash("Invalid code.", "err")
@@ -2109,8 +2624,8 @@ def login_2fa():
 def account():
     u = me(); uri = None
     if u["totp_secret"] and not u["totp_on"]:
-        uri = f"otpauth://totp/Ariznodes:{u['username']}?secret={u['totp_secret']}&issuer=Ariznodes"
-    return render_template("account.html", u=u, uri=uri, new_token=session.pop("new_token", None),
+        uri = f"otpauth://totp/Ariznodes:{u['username']}?secret={core.dsec(u['totp_secret'])}&issuer=Ariznodes"
+    return render_template("account.html", u=u, uri=uri, secret=core.dsec(u["totp_secret"]) if u["totp_secret"] else "", new_token=session.pop("new_token", None),
         tokens=core.q("SELECT id,name,created_at FROM tokens WHERE user_id=?", (u["id"],)),
         acts=core.q("SELECT * FROM activity WHERE user_id=? ORDER BY id DESC LIMIT 30", (u["id"],)))
 
@@ -2131,8 +2646,8 @@ def acc_password():
 def acc_2fa(step):
     u = me()
     if step == "start" and not u["totp_on"]:
-        core.ex("UPDATE users SET totp_secret=? WHERE id=?", (base64.b32encode(secrets.token_bytes(20)).decode().rstrip("="), u["id"]))
-    elif step == "enable" and u["totp_secret"] and totp_ok(u["totp_secret"], request.form.get("code")):
+        core.ex("UPDATE users SET totp_secret=? WHERE id=?", (core.esec(base64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")), u["id"]))
+    elif step == "enable" and u["totp_secret"] and totp_ok(core.dsec(u["totp_secret"]), request.form.get("code")):
         core.ex("UPDATE users SET totp_on=1 WHERE id=?", (u["id"],)); act("2fa", "enabled"); flash("Two-factor authentication enabled.", "ok")
     elif step == "enable": flash("That code is not valid - check your authenticator's clock.", "err")
     elif step == "disable" and check_password_hash(u["pw_hash"], request.form.get("password", "")):
@@ -2273,11 +2788,12 @@ def v_save(vid):
     return redirect(f"/v/{vid}/files?path={path}")
 
 # ------------------------------------------------------------------ REST API (Bearer)
-def api_user():
+def api_user(scopes=("full",)):
     h = request.headers.get("Authorization", "")
     if not h.startswith("Bearer "): return None
-    return core.q("SELECT u.* FROM tokens t JOIN users u ON u.id=t.user_id WHERE t.hash=? AND u.banned=0",
-                  (hashlib.sha256(h[7:].strip().encode()).hexdigest(),), one=True)
+    r = core.q("SELECT u.*, t.scope AS tscope, t.id AS tid FROM tokens t JOIN users u ON u.id=t.user_id WHERE t.hash=? AND u.banned=0 AND (t.expires_at IS NULL OR t.expires_at=0 OR t.expires_at>?)",
+               (hashlib.sha256(h[7:].strip().encode()).hexdigest(), time.time()), one=True)
+    return r if r and (r["tscope"] or "full") in scopes else None
 
 def api_vps(u, vid):
     v = fresh(vid)
@@ -2404,7 +2920,7 @@ T["account.html"] = MACRO + r'''{% extends "base.html" %}{% block body %}<h1 sty
 <input name="confirm" type="password" placeholder="Repeat new password" required autocomplete="new-password"><button>Update</button></form></div>
 <div class="card"><h3>Two-factor (TOTP)</h3>{% if u.totp_on %}<p><span class="tag">enabled</span></p><form method="post" action="/account/2fa/disable"><input type="hidden" name="csrf" value="{{ csrf }}">
 <input name="password" type="password" placeholder="Password to disable" required><button class="red">Disable</button></form>
-{% elif uri %}<p class="mut">Add this key to Google Authenticator, Authy, 1Password, etc. (manual entry, time-based):</p><pre>{{ u.totp_secret }}</pre><p class="mut" style="word-break:break-all">{{ uri }}</p>
+{% elif uri %}<p class="mut">Add this key to Google Authenticator, Authy, 1Password, etc. (manual entry, time-based):</p><pre>{{ secret }}</pre><p class="mut" style="word-break:break-all">{{ uri }}</p>
 <form method="post" action="/account/2fa/enable"><input type="hidden" name="csrf" value="{{ csrf }}"><input name="code" placeholder="6-digit code" inputmode="numeric" required><button>Confirm &amp; enable</button></form>
 {% else %}<p class="mut">Protect logins with a one-time code.</p>{{ pb('/account/2fa/start', 'Set up 2FA', '') }}{% endif %}</div>
 <div class="card"><h3>Sessions</h3><p class="mut">Sign out every other browser/device.</p>{{ pb('/account/logout-all', 'Sign out everywhere else') }}</div></div>
@@ -2493,7 +3009,7 @@ T["admin_more.html"] = MACRO + r'''{% extends "base.html" %}{% block body %}<p><
 import v3  # noqa: E402,F401  (v3 pages, nodes, security)
 PYFEAT
 
-  chmod 640 "$APP/core.py" "$APP/app.py" "$APP/bot.py" "$APP/ops.py" "$APP/features.py" "$APP/v3.py" "$APP/fun.py"
+  chmod 640 "$APP/core.py" "$APP/app.py" "$APP/bot.py" "$APP/ops.py" "$APP/features.py" "$APP/v3.py" "$APP/fun.py" "$APP/providers.py" "$APP/hub.py"
   echo "$VERSION" >"$APP/VERSION"
   ok "Application files deployed (v${VERSION})"
 }
@@ -2607,6 +3123,7 @@ FERNET_KEY=${fk}
 BIND_HOST=127.0.0.1
 PORT=${PORT}
 COOKIE_SECURE=1
+INSTALL_URL=${UPDATE_URL}
 CREATOR="${creator}"
 DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
 DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
@@ -2695,9 +3212,16 @@ src = sqlite3.connect(sys.argv[1]); dst = sqlite3.connect(sys.argv[2])
 src.backup(dst); dst.close(); src.close()
 PY
 cp -p "$APP/.env" "$TMP/env"
-tar -C "$TMP" -czf "$DEST/ariznodes-$STAMP.tar.gz" panel.db env
-ls -1t "$DEST"/ariznodes-*.tar.gz | tail -n +15 | xargs -r rm -f
-echo "$DEST/ariznodes-$STAMP.tar.gz"
+tar -C "$TMP" -czf "$TMP/b.tgz" panel.db env
+# Encrypted with the master key (FERNET_KEY in .env): without that key a backup is unreadable.
+"$APP/venv/bin/python" - "$TMP/b.tgz" "$DEST/ariznodes-$STAMP.tar.gz.enc" "$APP/.env" <<'PY'
+import sys
+from cryptography.fernet import Fernet
+key = next(l.split("=", 1)[1].strip() for l in open(sys.argv[3]) if l.startswith("FERNET_KEY="))
+open(sys.argv[2], "wb").write(Fernet(key.encode()).encrypt(open(sys.argv[1], "rb").read()))
+PY
+ls -1t "$DEST"/ariznodes-*.tar.gz* | tail -n +15 | xargs -r rm -f
+echo "$DEST/ariznodes-$STAMP.tar.gz.enc"
 EOF
   chmod 750 /usr/local/sbin/ariznodes-backup
   cat >/etc/systemd/system/ariznodes-backup.service <<'EOF'
@@ -2812,9 +3336,9 @@ step_selftest() {
 print_summary() {
   celebrate
   echo
-  echo "${C_BLD}${C_GRN}==================================================================${C_RST}"
+  rainbow
   echo "${C_BLD} Ariznodes(TM) HVM Panel ${VERSION} installed${C_RST}$([ "$SELFTEST_FAIL" -eq 1 ] && echo "  ${C_YLW}(with warnings above)${C_RST}")"
-  echo "${C_BLD}${C_GRN}==================================================================${C_RST}"
+  rainbow
   echo "  Public URL   : https://${DOMAIN}"
   echo "  Local URL    : http://127.0.0.1:${PORT}"
   if [ "${ADMIN_CREATED:-0}" = 1 ]; then
@@ -2823,6 +3347,8 @@ print_summary() {
   else
     echo "  Admin login  : existing account kept (forgot it? sudo bash ${SCRIPT_NAME} reset-admin)"
   fi
+  echo "  Master key   : $(env_val FERNET_KEY)"
+  echo "                 ^ decrypts backups and secrets. Save it offline (or run: sudo ariznodes show-key)"
   echo "  Engine       : $([ "$LXD_OK" -eq 1 ] && echo "LXD$([ -e /dev/kvm ] && echo ' + KVM VMs')" || echo 'Docker (containers only)')"
   echo
   echo "  ${C_BLD}Finish setup${C_RST}"
@@ -3096,7 +3622,12 @@ cmd_restore() {
   local f="${EXTRA_ARGS[0]:-}"
   [ -n "$f" ] && [ -f "$f" ] || die "Usage: sudo bash ${SCRIPT_NAME} restore /var/backups/ariznodes/ariznodes-<stamp>.tar.gz"
   confirm "Replace the CURRENT database and secrets with this backup?" n || die "Cancelled"
-  local tmp; tmp="$(mktemp -d)"; tar -xzf "$f" -C "$tmp" || die "Not a valid backup archive"
+  local tmp; tmp="$(mktemp -d)"
+  if [[ "$f" == *.enc ]]; then
+    local rk="${RESTORE_KEY:-$(env_val FERNET_KEY)}"; [ -n "$rk" ] || die "Encrypted backup: run with RESTORE_KEY=<your master key>"
+    RK="$rk" "$APP/venv/bin/python" -c 'import os,sys; from cryptography.fernet import Fernet; sys.stdout.buffer.write(Fernet(os.environ["RK"].encode()).decrypt(open(sys.argv[1],"rb").read()))' "$f" >"$tmp/b.tgz" 2>>"$LOG" || die "Wrong master key, or the backup is damaged"
+    tar -xzf "$tmp/b.tgz" -C "$tmp" || die "Not a valid backup archive"
+  else tar -xzf "$f" -C "$tmp" || die "Not a valid backup archive"; fi
   [ -f "$tmp/panel.db" ] && [ -f "$tmp/env" ] || die "Archive is missing panel.db or env"
   /usr/local/sbin/ariznodes-backup >/dev/null 2>&1 || true   # safety copy of what we are about to overwrite
   systemctl stop ariznodes-web ariznodes-bot
@@ -3174,6 +3705,8 @@ cmd_self_update() {
   if [ -d "$APP" ]; then exec bash /usr/local/sbin/ariznodes-installer upgrade; fi
 }
 
+cmd_show_key() { [ -f "$APP/.env" ] || die "Not installed"; echo "$(env_val FERNET_KEY)"; warn "Keep this offline. It decrypts your backups and stored secrets."; }
+
 cmd_diag() { # support bundle with no secrets in it
   local f="/root/ariznodes-diag-$(date +%Y%m%d-%H%M%S).txt"
   { echo "== ariznodes ${VERSION} $(date)"; . /etc/os-release; echo "$PRETTY_NAME"; uname -a; echo; free -m; swapon --show; df -h /; echo
@@ -3204,7 +3737,7 @@ main() {
   need_root
   init_log
   case "$CMD" in
-    install|upgrade|status|doctor|logs|backup|restore|reset-admin|uninstall|self-update|diag|node-test) ;;
+    install|upgrade|status|doctor|logs|backup|restore|reset-admin|uninstall|self-update|diag|node-test|show-key) ;;
     *) usage; die "Unknown command: $CMD" ;;
   esac
   if [ "$CMD" = install ]; then splash; elif [ "$CMD" != logs ]; then banner; fi
@@ -3225,6 +3758,7 @@ main() {
     self-update)  cmd_self_update ;;
     diag)         cmd_diag ;;
     node-test)    cmd_node_test ;;
+    show-key)     cmd_show_key ;;
   esac
 }
 
