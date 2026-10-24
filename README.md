@@ -11,6 +11,9 @@ A self-hosted control panel for giving out and managing **LXC containers, KVM vi
 **For users**
 - Register, link Discord, and deploy a server once you have enough verified invites (2 / 4 / 8 / 12 / 20 for basic / medium / large / pro / elite)
 - Choose **LXC container**, **KVM virtual machine** or **Docker container** when deploying (each is separate, no silent fallback)
+- Free **Test lab**: throwaway servers (30 min, no invites) from a local container, Daytona sandboxes, or any CLI provider you configure
+- Public **chat** and support **tickets**
+- Sign in with **Google, GitHub, Discord or email**
 - Per-server page: live CPU/RAM/network, console, file manager, snapshots, reinstall, root password reset
 - Access over **SSH** (Pinggy tunnel) or a browser terminal (**sshx**), no port forwarding needed
 - LXC advanced options: nesting, autostart, swap, CPU priority, process limit, automatic daily snapshots
@@ -19,8 +22,22 @@ A self-hosted control panel for giving out and managing **LXC containers, KVM vi
 - 5 themes with a live switcher, and an animated tutorial
 - REST API with tokens and an in-panel API tester
 
-**For admins** (separate admin console)
-- Nodes: add capacity from other servers, set slots, test, enable or disable
+**Ranks and roles**
+
+| Rank | What it gets |
+|---|---|
+| Member | Everyone. Plans by invites |
+| Special | +1 server slot, colored badge |
+| VIP / VIP+ | Basic / Medium plan without invites, +1 slot |
+| MVP+ / MVP++ | Large / Pro plan without invites, +2 slots |
+| T.Mod, Mod, Admin | Ban, timeout, moderate chat, answer tickets, create any server |
+| Sr. Admin | Plus manage servers, bonus invites, set ranks below them, view nodes, export |
+| Head Manager | Everything except changing the Main Owner |
+| Main Owner | Full control of every rank |
+
+**For admins** (separate staff console)
+- Nodes: three built-in local nodes (Docker, LXC, KVM; 10 slots each) plus remote nodes added with one command, and a visual setup guide
+- Ranks page, integrations page (social login, Daytona, custom CLI)
 - Users and servers: suspend, resize, transfer, grant bonus invites, view activity
 - Security: password rules, lockout limits, session length, automatic IP bans, admin IP allowlist, require 2FA, sign out everyone
 - Maintenance mode, server lifetime, Discord webhook alerts (raids, crypto mining, new admin device)
@@ -30,7 +47,7 @@ A self-hosted control panel for giving out and managing **LXC containers, KVM vi
 `/invites` `/myservers` `/plans` `/leaderboard` `/status` `/help` and `/nodes` (staff only). It counts only genuine invites, flags raids, and watches for crypto-mining behaviour.
 
 **Security**
-scrypt password hashing, CSRF protection, strict CSP and security headers, per-IP and per-account rate limits, honeypot and minimum-fill-time on login forms, optional Cloudflare Turnstile, TOTP 2FA with recovery codes, browser-bound sessions, encrypted stored secrets, signed and replay-protected node API.
+scrypt password hashing, encrypted sensitive database fields and encrypted backups (one master key), CSRF protection, strict CSP and security headers, per-IP and per-account rate limits, honeypot and minimum-fill-time on login forms, optional Cloudflare Turnstile, TOTP 2FA with recovery codes, browser-bound sessions, encrypted stored secrets, signed and replay-protected node API.
 
 ---
 
@@ -49,11 +66,13 @@ scrypt password hashing, CSRF protection, strict CSP and security headers, per-I
 
 ## Install (one command)
 
-Push `install.sh` and `get.sh` to your GitHub repo, set your username in both files (`REPO_RAW` in `get.sh`, `UPDATE_URL` in `install.sh`), then on a fresh server:
+Push `install.sh` to your GitHub repo (the `UPDATE_URL` near the top of the file must match your repo), then on a fresh server:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ArizNodesOp/ariznodes-hvm/main/get.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/ArizNodesOp/ariznodes-hvm/main/install.sh | sudo bash
 ```
+
+(`get.sh` is an optional wrapper that also verifies a checksum before running the installer. You can leave it out of the repo.)
 
 Or run the file directly:
 
@@ -106,11 +125,12 @@ sudo bash install.sh <command>      # or: sudo ariznodes <command>  after instal
 | `logs` | Follow web and bot logs |
 | `backup` / `restore <file>` | Backups (also automatic daily at 03:30, 14 kept) |
 | `reset-admin [user]` | New random password for an account |
+| `show-key` | Print the master key that decrypts backups and secrets |
 | `diag` | Support bundle written to `/root` (no secrets) |
 | `node-test` | On an API node: find out why it does not connect |
 | `uninstall` | Remove the panel (asks before touching servers) |
 
-Flags: `-y/--yes` (no questions), `--docker-only`, `--harden` / `--no-harden`, `--no-tunnel`, `--port N`, `--domain D`, `--node`, `--config FILE`.
+Flags: `--panel-url`, `--panel-key`, `--node-name`, `--node-url` (pre-answer the node questions), `-y/--yes` (no questions), `--docker-only`, `--harden` / `--no-harden`, `--no-tunnel`, `--port N`, `--domain D`, `--node`, `--config FILE`.
 
 ---
 
@@ -138,7 +158,15 @@ curl -X POST -H "Authorization: Bearer YOUR_TOKEN" https://YOUR-DOMAIN/api/v1/vp
 2. On the second server run the installer and choose **API node**. Give it a tunnel hostname that points to `http://localhost:8081`.
 3. The node appears under **Admin → Nodes**. New servers go to the local host first, then to the node with the most free slots.
 
+In the panel use **Admin > Nodes > Add a node (one command)**: it prints a one-hour, single-use command to run on the new server. The built-in guide shows the Cloudflare tunnel and domain steps.
+
 The node agent accepts only signed `lxc` and `docker` commands and rejects replayed requests.
+
+---
+
+## Data protection
+
+Sensitive fields (2FA secrets, emails, provider keys, node keys, server passwords) are stored encrypted, and every backup is encrypted with the master key shown at the end of the install (`sudo ariznodes show-key`). Keep a copy offline: without it, backups cannot be restored. The SQLite file itself is not whole-file encrypted.
 
 ---
 
